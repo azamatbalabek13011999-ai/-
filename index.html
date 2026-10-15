@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="kk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Мәтінді дыбысқа айналдыру</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",Roboto,Arial,sans-serif;background:#eef2f7;color:#263238}
+header{background:#1565c0;color:#fff;padding:14px 20px;font-size:20px;font-weight:600}
+.wrap{max-width:860px;margin:20px auto;padding:0 12px}
+.card{background:#fff;border:1px solid #d5dde8;border-radius:8px;padding:20px;margin-bottom:16px}
+h2{margin:0 0 12px;font-size:18px}
+textarea{width:100%;min-height:200px;padding:12px;border:1px solid #b0bec5;border-radius:6px;font:inherit;font-size:17px;line-height:1.5;resize:vertical}
+.row{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px}
+.row>div{flex:1;min-width:200px}
+label{display:block;font-size:14px;font-weight:600;margin-bottom:4px}
+select,input[type=file]{width:100%;padding:9px;border:1px solid #b0bec5;border-radius:6px;font-size:15px;background:#fff}
+input[type=range]{width:100%}
+.val{float:right;font-weight:400;color:#1565c0}
+.btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+button{border:0;border-radius:6px;padding:11px 22px;font-size:16px;cursor:pointer;color:#fff;background:#1e88e5}
+button:hover{background:#1565c0}
+button.g{background:#43a047}button.g:hover{background:#2e7d32}
+button.o{background:#fb8c00}button.o:hover{background:#ef6c00}
+button.r{background:#e53935}button.r:hover{background:#c62828}
+#status{margin-top:12px;font-size:14px;color:#37474f;min-height:20px}
+#status.warn{color:#c62828}
+#view{line-height:1.7;font-size:17px;white-space:pre-wrap}
+#view span.on{background:#fff59d;border-radius:3px}
+.bar{height:6px;background:#e3eaf3;border-radius:3px;margin-top:12px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:#1e88e5;transition:width .2s}
+@media(prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+</head>
+<body>
+<header>🔊 Жазба мәтінді аудиоға айналдыру</header>
+<div class="wrap">
+
+<div class="card">
+  <h2>Мәтін</h2>
+  <textarea id="txt" placeholder="Мәтінді осында жазыңыз немесе қойыңыз...">Сәлеметсіз бе! Бұл мәтінді дыбысқа айналдыру бағдарламасы. Мәтінді жазып, «Тыңдау» батырмасын басыңыз.</textarea>
+  <div class="row">
+    <div><label for="file">Мәтін файлын жүктеу (.txt)</label><input type="file" id="file" accept=".txt,text/plain"></div>
+    <div><label for="lang">Тіл</label>
+      <select id="lang">
+        <option value="kk">Қазақша</option>
+        <option value="ru">Русский</option>
+        <option value="en">English</option>
+      </select></div>
+    <div><label for="voice">Дауыс</label><select id="voice"></select></div>
+  </div>
+  <div class="row">
+    <div><label>Жылдамдық <span class="val" id="rv">1.0</span></label><input type="range" id="rate" min="0.5" max="1.5" step="0.1" value="1"></div>
+    <div><label>Дауыс биіктігі <span class="val" id="pv">1.0</span></label><input type="range" id="pitch" min="0.5" max="1.5" step="0.1" value="1"></div>
+    <div><label>Дыбыс деңгейі <span class="val" id="vv">100%</span></label><input type="range" id="vol" min="0" max="1" step="0.1" value="1"></div>
+  </div>
+  <div class="btns">
+    <button class="g" id="play">▶ Тыңдау</button>
+    <button class="o" id="pause">⏸ Кідірту</button>
+    <button class="r" id="stop">⏹ Тоқтату</button>
+    <button id="save">💾 Аудио жазып алу (.webm)</button>
+  </div>
+  <div class="bar"><i id="prog"></i></div>
+  <div id="status"></div>
+</div>
+
+<div class="card" id="vcard" style="display:none">
+  <h2>Оқылып жатқан мәтін</h2>
+  <div id="view"></div>
+</div>
+
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const synth=window.speechSynthesis;
+const LANGS={kk:"kk-KZ",ru:"ru-RU",en:"en-US"};
+let voices=[],chunks=[],idx=0,playing=false;
+
+function say(t,warn){$("status").textContent=t;$("status").className=warn?"warn":""}
+
+if(!synth){say("Бұл браузер дыбыстау функциясын қолдамайды. Chrome немесе Edge қолданыңыз.",true)}
+
+function loadVoices(){
+  voices=synth.getVoices();
+  const code=$("lang").value;
+  const list=voices.filter(v=>v.lang.toLowerCase().startsWith(code));
+  $("voice").innerHTML=list.length
+    ?list.map(v=>`<option value="${v.name}">${v.name} (${v.lang})</option>`).join("")
+    :`<option value="">Бұл тілге дауыс жоқ</option>`;
+  if(!list.length&&voices.length){
+    say(code==="kk"
+      ?"Қазақша дауыс құрылғыңызда жоқ. Microsoft Edge (Windows) қолданыңыз немесе орыс тілін таңдаңыз."
+      :"Таңдалған тілге дауыс табылмады.",true);
+  }else say("");
+}
+if(synth){synth.onvoiceschanged=loadVoices;loadVoices()}
+$("lang").onchange=loadVoices;
+
+["rate","pitch","vol"].forEach(id=>{
+  $(id).oninput=()=>{
+    $({rate:"rv",pitch:"pv",vol:"vv"}[id]).textContent=id==="vol"?Math.round($(id).value*100)+"%":Number($(id).value).toFixed(1);
+  };
+});
+
+$("file").onchange=e=>{
+  const f=e.target.files[0];if(!f)return;
+  const r=new FileReader();r.onload=()=>{$("txt").value=r.result};r.readAsText(f,"utf-8");
+};
+
+function split(t){
+  const parts=t.replace(/\s+/g," ").trim().match(/[^.!?…\n]+[.!?…]*/g)||[];
+  const out=[];
+  parts.forEach(p=>{p=p.trim();while(p.length>180){let k=p.lastIndexOf(" ",180);if(k<50)k=180;out.push(p.slice(0,k));p=p.slice(k).trim()}if(p)out.push(p)});
+  return out;
+}
+
+function render(){
+  $("view").innerHTML=chunks.map((c,k)=>`<span id="c${k}">${c.replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m]))} </span>`).join("");
+  $("vcard").style.display="block";
+}
+
+function speakNext(){
+  if(!playing)return;
+  if(idx>=chunks.length){playing=false;$("prog").style.width="100%";say("✅ Оқу аяқталды.");return}
+  document.querySelectorAll("#view span.on").forEach(s=>s.classList.remove("on"));
+  const el=$("c"+idx);if(el){el.classList.add("on");el.scrollIntoView({block:"nearest"})}
+  $("prog").style.width=Math.round(idx/chunks.length*100)+"%";
+  const u=new SpeechSynthesisUtterance(chunks[idx]);
+  const v=voices.find(x=>x.name===$("voice").value);
+  if(v){u.voice=v;u.lang=v.lang}else u.lang=LANGS[$("lang").value];
+  u.rate=+$("rate").value;u.pitch=+$("pitch").value;u.volume=+$("vol").value;
+  u.onend=()=>{idx++;speakNext()};
+  u.onerror=e=>{if(e.error==="interrupted"||e.error==="canceled")return;playing=false;say("Қате: "+e.error,true)};
+  synth.speak(u);
+}
+
+$("play").onclick=()=>{
+  if(!synth)return;
+  if(synth.paused){synth.resume();say("▶ Жалғасты.");return}
+  const t=$("txt").value.trim();
+  if(!t){say("Алдымен мәтін жазыңыз.",true);return}
+  synth.cancel();
+  chunks=split(t);idx=0;playing=true;render();say("🔊 Оқылуда...");speakNext();
+};
+$("pause").onclick=()=>{if(synth&&synth.speaking){synth.pause();say("⏸ Кідіртілді.")}};
+$("stop").onclick=()=>{playing=false;if(synth)synth.cancel();$("prog").style.width="0";say("⏹ Тоқтатылды.")};
+
+// Аудио жазып алу: құрылғы дыбысын (қойынды дыбысы) жазады
+$("save").onclick=async()=>{
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getDisplayMedia){say("Бұл браузерде жазу қолжетімсіз. Chrome/Edge компьютерде қолданыңыз.",true);return}
+  if(!$("txt").value.trim()){say("Алдымен мәтін жазыңыз.",true);return}
+  try{
+    say("Ашылған терезеде осы қойындыны таңдап, «Қойынды дыбысын бөлісу» опциясын қосыңыз.");
+    const st=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});
+    if(!st.getAudioTracks().length){st.getTracks().forEach(t=>t.stop());say("Дыбыс бөлісілмеді. Қайта көріңіз.",true);return}
+    const rec=new MediaRecorder(new MediaStream(st.getAudioTracks()));
+    const data=[];
+    rec.ondataavailable=e=>data.push(e.data);
+    rec.onstop=()=>{
+      st.getTracks().forEach(t=>t.stop());
+      const a=document.createElement("a");
+      a.href=URL.createObjectURL(new Blob(data,{type:"audio/webm"}));
+      a.download="audio.webm";a.click();
+      say("✅ Аудио жазба жүктелді (audio.webm).");
+    };
+    rec.start();
+    const done=setInterval(()=>{if(!playing&&!synth.speaking){clearInterval(done);setTimeout(()=>rec.state!=="inactive"&&rec.stop(),800)}},500);
+    $("play").click();
+  }catch(e){say("Жазу тоқтатылды: "+e.message,true)}
+};
+</script>
+</body>
+</html>
